@@ -37,20 +37,24 @@ else:
     month_end = month_start.replace(month=month_start.month + 1, day=1)
 num_days = (month_end - month_start).days
 dates = [month_start.replace(day=i) for i in range(1, num_days + 1)]
-weekends = {d for d in dates if d.weekday() >= 5}
+weekends = [d for d in dates if d.weekday() >= 5]
 
-# - QUOTA -
+# - SET BASE QUOTA -
 total_days = len(dates)
 total_ppl = len(people)
 base_quota = total_days // total_ppl
 extra = total_days % total_ppl
+
+print(base_quota, extra)
 
 # - SET INDIVIDUAL QUOTAS -
 target_counts = {}
 sorted_people = sorted(people, key=lambda p: p["duties_last_month"], reverse=True)
 for i, person in enumerate(sorted_people):
     quota = base_quota + (1 if i < extra else 0)
-    quota = max(0, quota - (person["duties_last_month"] > base_quota)) # 1 less if they did more last month
+    # Adjust quota down if they had more duties last month than base_quota
+    if person["duties_last_month"] > base_quota:
+        quota = max(quota - 1, base_quota)
     target_counts[person["name"]] = quota
 
 # - SET WEEKEND QUOTAS -
@@ -62,7 +66,35 @@ schedule = {}
 assigned_counts = defaultdict(int)
 weekend_counts = defaultdict(int)
 
+# - PRE-ASSIGN WEEKENDS -
+# Weekends are the biggest constraint, so assign them first. Other constraints can be relaxed later if needed.
+weekend_dates = list(weekends)
+weekend_dates.sort()
+
+for date in weekend_dates:
+    candidates = [p for p in weekend_people
+                  if date not in p["unavailable_dates"]
+                  and weekend_counts[p["name"]] < 2
+                  and not (date - timedelta(days=1) in schedule and schedule[date - timedelta(days=1)] == p["name"])]
+    if not candidates:
+        # Allow exceeding the 2 weekend limit if no candidates are available
+        candidates = [p for p in weekend_people
+                      if date not in p["unavailable_dates"]
+                      and not (date - timedelta(days=1) in schedule and schedule[date - timedelta(days=1)] == p["name"])]
+    if candidates:
+        chosen = sorted(
+            candidates,
+            key=lambda x: (weekend_counts[x["name"]], assigned_counts[x["name"]], x["duties_last_month"])
+        )[0]
+        schedule[date] = chosen["name"]
+        weekend_counts[chosen["name"]] += 1
+        assigned_counts[chosen["name"]] += 1
+
+# - ASSIGN WEEKDAYS -
 for date in dates:
+    if date in schedule:  # Already filled during pre-assignment
+        continue
+
     candidates = []
     for p in people:
         name = p["name"]
@@ -76,10 +108,21 @@ for date in dates:
             continue
         if assigned_counts[name] >= target_counts[name]: # Prevent exceeding target
             continue
-        if date in weekends and weekend_counts[name] >= 2:
-            continue
 
         candidates.append(p)
+
+    # If no candidates found, relax the target constraint
+    if not candidates:
+        for p in people:
+            name = p["name"]
+            if date in p["unavailable_dates"]:
+                continue
+            if date in weekends and not p["needs_weekends"]:
+                continue
+            prev_date = date - timedelta(days=1)
+            if prev_date in schedule and schedule[prev_date] == name:
+                continue
+            candidates.append(p)
 
     if candidates:
         chosen = sorted(
@@ -93,6 +136,27 @@ for date in dates:
     else:
         schedule[date] = "UNASSIGNED"
 
+# - BACKTRACK TO FIX SINGLE WEEKEND ASSIGNMENTS -
+for p in weekend_people:
+    if weekend_counts[p["name"]] == 1:
+        # If they only have 1 weekend, try to swap with someone who has 2+
+        for date in weekend_dates:
+            if schedule.get(date) == "UNASSIGNED":
+                schedule[date] = p["name"]
+                weekend_counts[p["name"]] += 1
+                assigned_counts[p["name"]] += 1
+                break
+            elif (schedule.get(date) != p["name"] 
+                  and weekend_counts[schedule[date]] > 2
+                  and date not in p["unavailable_dates"]):
+                old = schedule[date]
+                schedule[date] = p["name"]
+                weekend_counts[p["name"]] += 1
+                assigned_counts[p["name"]] += 1
+                weekend_counts[old] -= 1
+                assigned_counts[old] -= 1
+                break
+
 for d in dates:
     print(d, "->", schedule[d])
 
@@ -100,3 +164,5 @@ print("\nSummary:")
 for p in people:
     name = p["name"]
     print(name, "duties:", assigned_counts[name], "weekends:", weekend_counts[name], "target:", target_counts[name])
+
+## TODO: Create next month's data.json automatically based on this month's assignments
