@@ -10,8 +10,14 @@
 ################################################################################
 
 import json
+import argparse
 from datetime import datetime, timedelta
 from collections import defaultdict
+
+parser = argparse.ArgumentParser(description="Guard Duty Planner")
+parser.add_argument("--month", type=str, help="Month and Year (e.g., 'November 2025')", required=True)
+args = parser.parse_args()
+month = args.month
 
 with open("data.json", "r") as file:
     data = json.load(file)
@@ -29,7 +35,6 @@ for entry in data["people"]:
         "duties_last_month": entry["duties_last_month"],
     })
 
-month = "November 2025"
 month_start = datetime.strptime(f"1 {month}", "%d %B %Y").date()
 if month_start.month == 12:
     month_end = month_start.replace(year=month_start.year + 1, month=1, day=1)
@@ -213,8 +218,10 @@ for p in people:
         "unavailable_dates": [],  # reset
         "duties_last_month": assigned_counts[p["name"]]  # update with this month's duty count
     })
+# Use the next month name (e.g., "December_2025_data.json")
+filename = f"{(month_start + timedelta(days=num_days)).strftime('%B_%Y')}_data.json"
 
-with open("next_month_data.json", "w") as f:
+with open(filename, "w") as f:
     json.dump(next_data, f, indent=4)
 
-print(f"\nnext_month_data.json generated for {next_month}")
+print(f"\n{filename} generated for {next_month}")
