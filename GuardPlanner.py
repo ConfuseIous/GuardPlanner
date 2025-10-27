@@ -10,6 +10,7 @@
 ################################################################################
 
 import json
+import random
 import argparse
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -210,6 +211,9 @@ for p in people:
 # --- CREATE NEXT MONTH DATA.JSON ---
 next_month = (month_start + timedelta(days=num_days)).strftime("%B %Y")
 next_data = {"people": []}
+
+# -- SHUFFLE TO AVOID ORDER BIAS --
+random.shuffle(people)
 
 for p in people:
     next_data["people"].append({
