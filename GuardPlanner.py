@@ -214,7 +214,7 @@ next_data = {"people": []}
 for p in people:
     next_data["people"].append({
         "name": p["name"],
-        "needs_weekends": p["needs_weekends"],
+        "needs_weekends": weekend_counts[p["name"]] == 0,
         "unavailable_dates": [],  # reset
         "duties_last_month": assigned_counts[p["name"]]  # update with this month's duty count
     })
