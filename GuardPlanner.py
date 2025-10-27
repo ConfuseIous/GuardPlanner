@@ -19,7 +19,7 @@ parser.add_argument("--month", type=str, help="Month and Year (e.g., 'November 2
 args = parser.parse_args()
 month = args.month
 
-with open("data.json", "r") as file:
+with open(f"{month.replace(' ', '_')}_data.json", "r") as file:
     data = json.load(file)
 
 people = []
